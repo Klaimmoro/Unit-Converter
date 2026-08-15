@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit Converter</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --paper: #f7f7f5;
+    --line: #16181d;
+    --accent: #4b4bff;
+    --muted: #6b6f76;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #ececea;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 24px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--paper);
+    border: 2px solid var(--line);
+    border-radius: 18px;
+    padding: 28px;
+    position: relative;
+    min-height: 560px;
+  }
+
+  h1 {
+    font-size: 28px;
+    margin: 0 0 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 22px;
+    margin-bottom: 28px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .tab {
+    cursor: pointer;
+    padding-bottom: 6px;
+    border-bottom: 2px solid transparent;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font: inherit;
+    color: inherit;
+  }
+
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  label {
+    display: block;
+    font-size: 14px;
+    margin: 14px 0 8px;
+    color: var(--ink);
+  }
+
+  input[type="number"], select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    font-size: 15px;
+    background: #fff;
+    font-family: inherit;
+    appearance: none;
+  }
+
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%2316181d' stroke-width='2' fill='none'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
+
+  button.primary {
+    margin-top: 24px;
+    width: 100%;
+    padding: 14px;
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  button.primary:hover { background: #000; }
+
+  button.secondary {
+    margin-top: 24px;
+    padding: 14px 22px;
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  button.secondary:hover { background: #f0f0ee; }
+
+  .result-label {
+    font-size: 15px;
+    color: var(--muted);
+    margin-top: 30px;
+  }
+
+  .result-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    margin: 12px 0 4px;
+    word-break: break-word;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Unit Converter</h1>
+
+  <div class="tabs">
+    <button class="tab active" data-category="length">Length</button>
+    <button class="tab" data-category="weight">Weight</button>
+    <button class="tab" data-category="temperature">Temperature</button>
+  </div>
+
+  <!-- FORM SCREEN -->
+  <div class="screen active" id="form-screen">
+    <label for="value">Enter the value to convert</label>
+    <input type="number" id="value" placeholder="e.g. 20" step="any">
+
+    <label for="from-unit">Unit to convert from</label>
+    <select id="from-unit"></select>
+
+    <label for="to-unit">Unit to convert to</label>
+    <select id="to-unit"></select>
+
+    <button class="primary" id="convert-btn">Convert</button>
+  </div>
+
+  <!-- RESULT SCREEN -->
+  <div class="screen" id="result-screen">
+    <div class="result-label">Result of your calculation</div>
+    <div class="result-value" id="result-value">—</div>
+    <button class="secondary" id="reset-btn">Reset</button>
+  </div>
+</div>
+
+<script>
+  // Только списки единиц для UI. Сама конвертация считается на бэкенде Go.
+  const unitLabels = {
+    length: {
+      m: "Meters (m)",
+      km: "Kilometers (km)",
+      cm: "Centimeters (cm)",
+      mm: "Millimeters (mm)",
+      ft: "Feet (ft)",
+      in: "Inches (in)",
+      mi: "Miles (mi)",
+    },
+    weight: {
+      kg: "Kilograms (kg)",
+      g: "Grams (g)",
+      lb: "Pounds (lb)",
+      oz: "Ounces (oz)",
+      t: "Metric tons (t)",
+    },
+    temperature: {
+      c: "Celsius (°C)",
+      f: "Fahrenheit (°F)",
+      k: "Kelvin (K)",
+    }
+  };
+
+  // Адрес твоего Go-бэкенда. Поменяй, если хендлер висит на другом пути/порту.
+  const API_URL = "/convert";
+
+  let currentCategory = "length";
+
+  const tabs = document.querySelectorAll(".tab");
+  const fromSelect = document.getElementById("from-unit");
+  const toSelect = document.getElementById("to-unit");
+  const valueInput = document.getElementById("value");
+  const formScreen = document.getElementById("form-screen");
+  const resultScreen = document.getElementById("result-screen");
+  const resultValue = document.getElementById("result-value");
+  const convertBtn = document.getElementById("convert-btn");
+
+  function populateUnitSelects(category) {
+    const list = unitLabels[category];
+    const keys = Object.keys(list);
+    fromSelect.innerHTML = keys.map(k => `<option value="${k}">${list[k]}</option>`).join("");
+    toSelect.innerHTML = keys.map(k => `<option value="${k}">${list[k]}</option>`).join("");
+    if (keys.length > 1) toSelect.selectedIndex = 1;
+  }
+
+  function switchCategory(category) {
+    currentCategory = category;
+    tabs.forEach(t => t.classList.toggle("active", t.dataset.category === category));
+    populateUnitSelects(category);
+    showForm();
+    valueInput.value = "";
+  }
+
+  function showForm() {
+    formScreen.classList.add("active");
+    resultScreen.classList.remove("active");
+  }
+
+  function showResult() {
+    formScreen.classList.remove("active");
+    resultScreen.classList.add("active");
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => switchCategory(tab.dataset.category));
+  });
+
+  async function handleConvert() {
+    const raw = valueInput.value;
+    if (raw === "") {
+      valueInput.focus();
+      return;
+    }
+
+    const payload = {
+      category: currentCategory,
+      value: parseFloat(raw),
+      from: fromSelect.value,
+      to: toSelect.value,
+    };
+
+    convertBtn.disabled = true;
+    convertBtn.textContent = "Converting...";
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const data = await response.json();
+      // Ожидаем { "result": number } от Go-бэкенда.
+      resultValue.textContent =
+        `${payload.value} ${payload.from} = ${data.result} ${payload.to}`;
+
+      showResult();
+    } catch (err) {
+      resultValue.textContent = "Ошибка запроса";
+      showResult();
+      console.error("Convert request failed:", err);
+    } finally {
+      convertBtn.disabled = false;
+      convertBtn.textContent = "Convert";
+    }
+  }
+
+  convertBtn.addEventListener("click", handleConvert);
+
+  document.getElementById("reset-btn").addEventListener("click", () => {
+    valueInput.value = "";
+    showForm();
+  });
+
+  // init
+  populateUnitSelects(currentCategory);
+</script>
+
+</body>
+</html>
